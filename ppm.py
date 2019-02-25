@@ -3,6 +3,17 @@ import numpy as np
 
 from PIL import Image
 
+FRAMERATES = {
+    1: 0.5,
+    2: 1,
+    3: 2,
+    4: 4,
+    5: 6,
+    6: 12,
+    7: 20,
+    8: 30,
+}
+
 THUMBNAIL_PALETTE = [
   (0xFF, 0xFF, 0xFF),
   (0x52, 0x52, 0x52),
@@ -33,7 +44,7 @@ class PPMParser:
     f = open(path, "rb")
     return cls(f)
 
-  def __init__(self, stream):
+  def __init__(self, stream=None):
     if stream: self.load(stream)
 
   def load(self, stream):
@@ -41,9 +52,13 @@ class PPMParser:
     self.read_header()
     self.read_meta()
     self.read_animation_header()
+    self.read_sound_header()
     self.layers = np.zeros((2, 192, 256), dtype=np.uint8)
     self.prev_layers = np.zeros((2, 192, 256), dtype=np.uint8)
     self.prev_frame_index = -1
+  
+  def unload(self):
+    self.stream.close()
 
   def read_header(self):
     # decode header
@@ -68,7 +83,7 @@ class PPMParser:
     # decode metadata
     # https://github.com/pbsds/hatena-server/wiki/PPM-format#file-header
     self.stream.seek(0x10)
-    self.lock, self.thumb_frame_index = struct.unpack("<HH", self.stream.read(4))
+    self.lock, self.thumb_index = struct.unpack("<HH", self.stream.read(4))
     self.root_author_name = self.stream.read(22).decode("utf-16").rstrip("\x00")
     self.parent_author_name = self.stream.read(22).decode("utf-16").rstrip("\x00")
     self.current_author_name = self.stream.read(22).decode("utf-16").rstrip("\x00")
@@ -105,6 +120,19 @@ class PPMParser:
     # read offset table into a numpy array
     offset_table = np.frombuffer(self.stream.read(table_size), dtype=np.uint32)
     self.offset_table = [offset + 0x06A0 + 8 + table_size for offset in offset_table]
+  
+  def read_sound_header(self):
+    # https://github.com/pbsds/hatena-server/wiki/PPM-format#sound-data-section
+    # offset = frame data offset + frame data length + sound effect flags
+    offset = 0x06A0 + self.animation_data_size + self.frame_count;
+    # account for multiple-of-4 padding
+    if offset % 4 != 0: offset += 4 - (offset % 4)
+    self.stream.seek(offset)
+    bgm_size, se1_size, se2_size, se3_size, frame_speed, bgm_speed = struct.unpack("<IIIIBB", self.stream.read(18))
+    self.frame_speed = 8 - frame_speed
+    self.bgm_speed = 8 - bgm_speed
+    self.framerate = FRAMERATES[self.frame_speed]
+    self.bgm_framerate = FRAMERATES[self.bgm_speed]
 
   def is_frame_new(self, index):
     self.stream.seek(self.offset_table[index])
@@ -175,14 +203,15 @@ class PPMParser:
               pixel += 1
     
     # frame diffing
+    # this is a big performance bottleneck
     if not is_new_frame:
       for y in range(192):
         # if line is out of range, skip
-        if (y - translation_y > 192) or (y - translation_y < 0): 
+        if (y - translation_y >= 192) or (y - translation_y < 0): 
           continue
         for x in range(256):
           # if pixel is out of range, skip
-          if (x - translation_x > 256) or (x - translation_x < 0): 
+          if (x - translation_x >= 256) or (x - translation_x < 0): 
             continue
           self.layers[0][y][x] ^= self.prev_layers[0][y - translation_y][x - translation_x]
           self.layers[1][y][x] ^= self.prev_layers[1][y - translation_y][x - translation_x]
