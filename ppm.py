@@ -22,6 +22,11 @@ THUMBNAIL_PALETTE = [
   (0x00, 0xFF, 0x00),
 ]
 
+BLACK = (0x0E, 0x0E, 0x0E)
+WHITE = (0xFF, 0xFF, 0xFF)
+BLUE = (0x0A, 0x39, 0xFF)
+RED = (0xFF, 0x2A, 0x2A)
+
 class PPMParser:
   @classmethod
   def open(cls, path):
@@ -113,18 +118,28 @@ class PPMParser:
   def read_frame(self, index):
     if index != 0 and self.prev_frame_index != index - 1 and not self.is_frame_new(index):
       self.read_frame(index - 1)
-
     # copy the current layer buffers to the previous ones
     np.copyto(self.prev_layers, self.layers)
-
+    self.prev_frame_index = index
+    # clear current layer buffers by reseting them to 0
+    self.layers.fill(0)
+    # seek to the frame offset so we can start reading
     self.stream.seek(self.offset_table[index])
+    # unpack frame header flags
     header = ord(self.stream.read(1))
     is_new_frame = (header >> 7) & 0x1
     is_translated = (header >> 5) & 0x3
+    translation_x = 0
+    translation_y = 0
+    # if the frame is translated, we need to unpack the x and y values
+    if is_translated:
+      translation_x, translation_y = struct.unpack("<bb", self.stream.read(2))
+    # read line encoding bytes
     line_types = [
       self.stream.read(48),
       self.stream.read(48),
     ]
+    # loop through layers
     for layer in range(2):
       bitmap = self.layers[layer]
       for line, line_type in self.read_line_types(line_types[layer]):
@@ -159,5 +174,42 @@ class PPMParser:
               bitmap[line][pixel] = chunk >> bit & 0x1
               pixel += 1
     
+    # frame diffing
+    if not is_new_frame:
+      for y in range(192):
+        # if line is out of range, skip
+        if (y - translation_y > 192) or (y - translation_y < 0): 
+          continue
+        for x in range(256):
+          # if pixel is out of range, skip
+          if (x - translation_x > 256) or (x - translation_x < 0): 
+            continue
+          self.layers[0][y][x] ^= self.prev_layers[0][y - translation_y][x - translation_x]
+          self.layers[1][y][x] ^= self.prev_layers[1][y - translation_y][x - translation_x]
+
     return self.layers
 
+  def get_frame_palette(self, index):
+    self.stream.seek(self.offset_table[index])
+    header = ord(self.stream.read(1))
+    paper_color = header & 0x1;
+    pen = [
+      None,
+      BLACK if paper_color == 1 else WHITE,
+      RED,
+      BLUE,
+    ]
+    return [
+      WHITE if paper_color == 1 else BLACK,
+      pen[(header >> 1) & 0x3], # layer 1 color
+      pen[(header >> 3) & 0x3], # layer 2 color
+    ];
+
+  def get_frame_pixels(self, index):
+    layers = self.read_frame(index)
+    pixels = np.zeros((192, 256), dtype=np.uint8)
+    for y in range(192):
+      for x in range(256):
+        if layers[0][y][x] > 0: pixels[y][x] = 1
+        elif layers[1][y][x] > 0: pixels[y][x] = 2
+    return pixels
