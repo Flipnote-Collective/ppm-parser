@@ -1,8 +1,28 @@
+# ====================
+# ppm.py version 1.0.0
+# ====================
+
+# Class for parsing Flipnote Studio's .ppm animation format
+# Implementation by James Daniel (aka jaames) (github.com/jaames | rakujira.jp)
+#
+# Credits:
+#   PPM format reverse-engineering and documentation:
+#     bricklife (http://ugomemo.g.hatena.ne.jp/bricklife/20090307/1236391313)
+#     mirai-iro (http://mirai-iro.hatenablog.jp/entry/20090116/ugomemo_ppm)
+#     harimau_tigris (http://ugomemo.g.hatena.ne.jp/harimau_tigris)
+#     steven (http://www.dsibrew.org/wiki/User:Steven)
+#     yellows8 (http://www.dsibrew.org/wiki/User:Yellows8)
+#     PBSDS (https://github.com/pbsds)
+#     jaames (https://github.com/jaames)
+#   Identifying the PPM sound codec:
+#     Midmad from Hatena Haiku
+#     WDLMaster from hcs64.com
+
 import struct
 import numpy as np
+from datetime import datetime 
 
-from PIL import Image
-
+# Flipnote speed -> frames per second
 FRAMERATES = {
     1: 0.5,
     2: 1,
@@ -14,6 +34,7 @@ FRAMERATES = {
     8: 30,
 }
 
+# Thumbnail bitmap RGB colors
 THUMBNAIL_PALETTE = [
   (0xFF, 0xFF, 0xFF),
   (0x52, 0x52, 0x52),
@@ -33,6 +54,7 @@ THUMBNAIL_PALETTE = [
   (0x00, 0xFF, 0x00),
 ]
 
+# Frame RGB colors
 BLACK = (0x0E, 0x0E, 0x0E)
 WHITE = (0xFF, 0xFF, 0xFF)
 BLUE = (0x0A, 0x39, 0xFF)
@@ -92,8 +114,12 @@ class PPMParser:
     self.parent_filename = self.read_filename()
     self.current_filename = self.read_filename()
     self.root_author_id = "%016X" % struct.unpack("<Q", self.stream.read(8))
-    self.partial_filename = self.stream.read(0) # not really useful for anything :/
-    self.timestamp = struct.unpack("<I", self.stream.read(4))
+    self.partial_filename = self.stream.read(8) # not really useful for anything :/
+    # timestamp is stored as the number of seconds since jan 1st 2000
+    timestamp = struct.unpack("<I", self.stream.read(4))[0]
+    # we add 946684800 to convert this to a more common unix timestamp, which start on jan 1st 1970
+    self.timestamp = datetime.fromtimestamp(timestamp + 946684800)
+    print(self.timestamp)
 
   def read_thumbnail(self):
     self.stream.seek(0xA0)
@@ -144,6 +170,7 @@ class PPMParser:
       yield (index, line_type)
 
   def read_frame(self, index):
+    # decode previous frames if needed
     if index != 0 and self.prev_frame_index != index - 1 and not self.is_frame_new(index):
       self.read_frame(index - 1)
     # copy the current layer buffers to the previous ones
@@ -202,17 +229,25 @@ class PPMParser:
               bitmap[line][pixel] = chunk >> bit & 0x1
               pixel += 1
     
-    # frame diffing
-    # this is a big performance bottleneck
+    # frame diffing - if the current frame is based on the preivous one, merge them by XORing their pixels
+    # this is a big performance bottleneck...
     if not is_new_frame:
+      # loop through lines
       for y in range(192):
-        # if line is out of range, skip
-        if (y - translation_y >= 192) or (y - translation_y < 0): 
+        # skip to next line if this one falls off the top edge of the screen
+        if y - translation_y < 0:
           continue
+        # stop once the bottom screen edge has been reached
+        if y - translation_y >= 192:
+          break
         for x in range(256):
-          # if pixel is out of range, skip
-          if (x - translation_x >= 256) or (x - translation_x < 0): 
+          # skip to the next pixel if this one falls off the left edge of the screen
+          if x - translation_x < 0:
             continue
+          #  stop diffing this line once the right screen edge has been reached
+          if x - translation_x >= 256:
+            break
+          # diff pixels with a binary XOR
           self.layers[0][y][x] ^= self.prev_layers[0][y - translation_y][x - translation_x]
           self.layers[1][y][x] ^= self.prev_layers[1][y - translation_y][x - translation_x]
 

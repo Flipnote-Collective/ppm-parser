@@ -4,6 +4,16 @@ Example decoder and utilities for Flipnote Studio's .ppm animation format.
 
 All scripts were written for Python 3.7 and require the [numpy](http://www.numpy.org/) module to be installed.
 
+### Credits
+
+  * [jaames](https://github.com/jaames) for completing PPM reverse-engineering and writing this implementation.
+  * [bricklife](http://ugomemo.g.hatena.ne.jp/bricklife/20090307/1236391313), [mirai-iro](http://mirai-iro.hatenablog.jp/entry/20090116/ugomemo_ppm), [harimau_tigris](http://ugomemo.g.hatena.ne.jp/harimau_tigris), and other members of the Japanese Flipnote community who started reverse-engineering the PPM format almost as soon as the app was released.
+  * Midmad and WDLMaster for identifying the adpcm sound codec used.
+  * [steven](http://www.dsibrew.org/wiki/User:Steven) and [yellows8](http://www.dsibrew.org/wiki/User:Yellows8) for the PPM documentation on DSiBrew.
+  * [PBSDS](https://github.com/pbsds) for more PPM reverse-engineering, as well as writing [hatenatools](https://github.com/pbsds/Hatenatools)
+
+## Utilities
+
 ### ppmImage
 
 Converts specific ppm frames to standard image formats such as png, gif, jpeg, etc. Requires the [Pillow](https://pillow.readthedocs.io/en/5.2.x/) module to be installed.
