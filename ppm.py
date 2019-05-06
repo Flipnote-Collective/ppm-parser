@@ -119,7 +119,6 @@ class PPMParser:
     timestamp = struct.unpack("<I", self.stream.read(4))[0]
     # we add 946684800 to convert this to a more common unix timestamp, which start on jan 1st 1970
     self.timestamp = datetime.fromtimestamp(timestamp + 946684800)
-    print(self.timestamp)
 
   def read_thumbnail(self):
     self.stream.seek(0xA0)
