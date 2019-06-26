@@ -151,7 +151,7 @@ class PPMParser:
     # offset = frame data offset + frame data length + sound effect flags
     offset = 0x06A0 + self.animation_data_size + self.frame_count;
     # account for multiple-of-4 padding
-    if offset % 4 != 0: offset += 4 - (offset % 4)
+    if offset % 2 != 0: offset += 4 - (offset % 4)
     self.stream.seek(offset)
     bgm_size, se1_size, se2_size, se3_size, frame_speed, bgm_speed = struct.unpack("<IIIIBB", self.stream.read(18))
     self.frame_speed = 8 - frame_speed
