@@ -1,3 +1,5 @@
+>> This project has not been updated for some time and does not reflect the latest findings of our reverse-engineering efforts. For now, please refer to [flipnote.js](https://github.com/jaames/flipnote.js/blob/master/src/parsers/PpmParser.ts), as this is the closest thing to an up-to-date reference implementation.
+
 Example decoder and utilities for Flipnote Studio's .ppm animation format. 
 
 **This is not remotely optimised, and is for example purposes only**
